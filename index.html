@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InspectionCore</title>
+    <meta name="description" content="Commercial and residential property inspection platform with 3-tier hierarchy standards, spreadsheet migration, and defect narrative reporting." />
+    <meta property="og:title" content="InspectionCore" />
+    <meta property="og:description" content="Commercial and residential property inspection platform with 3-tier hierarchy standards, spreadsheet migration, and defect narrative reporting." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,100..1000&family=Google+Sans+Text:ital,wght@0,400;0,500;0,700;1,400&family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        // Intercept Vite HMR WebSocket in sandboxed environments where port forwarding for HMR is disabled
+        var RealWebSocket = window.WebSocket;
+        if (RealWebSocket) {
+          function isViteHmr(url, protocols) {
+            if (protocols === 'vite-hmr' || (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1)) {
+              return true;
+            }
+            var str = String(url || '');
+            return str.indexOf('vite-hmr') !== -1 || (str.indexOf('token=') !== -1 && (str.indexOf(':24678') !== -1 || str.indexOf(':3000') !== -1));
+          }
+
+          function DummyViteSocket() {
+            this.readyState = 1; // WebSocket.OPEN
+            this.listeners = {};
+          }
+          DummyViteSocket.prototype.addEventListener = function(type, fn) {
+            if (!this.listeners[type]) this.listeners[type] = [];
+            this.listeners[type].push(fn);
+            if (type === 'open') {
+              var self = this;
+              setTimeout(function() {
+                try { if (typeof fn === 'function') fn.call(self, new Event('open')); } catch (e) {}
+              }, 0);
+            }
+          };
+          DummyViteSocket.prototype.removeEventListener = function(type, fn) {
+            if (!this.listeners[type]) return;
+            this.listeners[type] = this.listeners[type].filter(function(f) { return f !== fn; });
+          };
+          DummyViteSocket.prototype.dispatchEvent = function(event) {
+            var list = this.listeners[event.type] || [];
+            for (var i = 0; i < list.length; i++) {
+              try { list[i].call(this, event); } catch (e) {}
+            }
+            return true;
+          };
+          DummyViteSocket.prototype.send = function() {};
+          DummyViteSocket.prototype.close = function() {
+            this.readyState = 3; // WebSocket.CLOSED
+          };
+
+          DummyViteSocket.CONNECTING = 0;
+          DummyViteSocket.OPEN = 1;
+          DummyViteSocket.CLOSING = 2;
+          DummyViteSocket.CLOSED = 3;
+
+          window.WebSocket = function(url, protocols) {
+            if (isViteHmr(url, protocols)) {
+              return new DummyViteSocket();
+            }
+            return new (Function.prototype.bind.apply(RealWebSocket, [null].concat([].slice.call(arguments))))();
+          };
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+          window.WebSocket.prototype = RealWebSocket.prototype;
+        }
+
+        // Intercept console.error to prevent benign dev-time WebSocket logs from triggering UI error overlays
+        var origConsoleError = console.error;
+        console.error = function() {
+          var args = [].slice.call(arguments);
+          var first = String(args[0] || '');
+          if (first.indexOf('[vite] failed to connect to websocket') !== -1 || first.indexOf('WebSocket closed without opened') !== -1) {
+            if (console.debug) console.debug.apply(console, args);
+            return;
+          }
+          return origConsoleError.apply(console, args);
+        };
+
+        function isWsError(err) {
+          if (!err) return false;
+          var str = String(err.message || err.reason || err || '').toLowerCase();
+          return str.indexOf('websocket') !== -1;
+        }
+        window.addEventListener('unhandledrejection', function(e) {
+          if (isWsError(e && e.reason)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return false;
+          }
+        }, true);
+        window.addEventListener('error', function(e) {
+          if (isWsError(e && (e.error || e.message))) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            return false;
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
