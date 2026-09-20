@@ -1,6 +1,9 @@
 import dns from 'dns';
 try {
-  dns.setDefaultResultOrder('verbatim');
+  // Only use verbatim DNS if not in Vercel (AWS Lambda lacks IPv6 egress)
+  if (!process.env.VERCEL) {
+    dns.setDefaultResultOrder('verbatim');
+  }
 } catch {
   // Ignore
 }
@@ -40,8 +43,10 @@ app.use((_req, res, next) => {
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
+const router = express.Router();
+
 // Enterprise UUID route parameter validation
-app.param('id', (_req, res, next, id) => {
+router.param('id', (_req, res, next, id) => {
   if (!UUID_REGEX.test(id)) {
     return res.status(400).json({ error: `Invalid UUID identifier format: "${id}"` });
   }
@@ -51,7 +56,7 @@ app.param('id', (_req, res, next, id) => {
 // --- API ROUTES ---
 
 // Health Check
-app.get('/api/health', async (_req: Request, res: Response) => {
+router.get('/health', async (_req: Request, res: Response) => {
   try {
     const dbCheck = await query('SELECT 1 as connected');
     res.json({
@@ -70,7 +75,7 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 });
 
 // List all templates
-app.get('/api/templates', async (_req: Request, res: Response) => {
+router.get('/templates', async (_req: Request, res: Response) => {
   try {
     const templates = await listTemplates();
     res.json({ templates });
@@ -81,7 +86,7 @@ app.get('/api/templates', async (_req: Request, res: Response) => {
 });
 
 // Get template details with full hierarchy
-app.get('/api/templates/:id', async (req: Request, res: Response) => {
+router.get('/templates/:id', async (req: Request, res: Response) => {
   try {
     const template = await getTemplateWithHierarchy(req.params.id);
     if (!template) {
@@ -95,7 +100,7 @@ app.get('/api/templates/:id', async (req: Request, res: Response) => {
 });
 
 // Download committed fixture
-app.get('/api/fixture/download', (_req: Request, res: Response) => {
+router.get('/fixture/download', (_req: Request, res: Response) => {
   const fixturePath = path.join(process.cwd(), 'fixtures/spectora/InterNACHI-Residential-HTML-Text.xlsx');
   if (!fs.existsSync(fixturePath)) {
     return res.status(404).json({ error: 'Fixture file not found on server' });
@@ -104,7 +109,7 @@ app.get('/api/fixture/download', (_req: Request, res: Response) => {
 });
 
 // Preview spreadsheet import before committing
-app.post('/api/templates/preview', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/templates/preview', upload.single('file'), async (req: Request, res: Response) => {
   try {
     let buffer: Buffer | null = null;
     let filename = 'Uploaded-Template.xlsx';
@@ -156,7 +161,7 @@ app.post('/api/templates/preview', upload.single('file'), async (req: Request, r
 });
 
 // Commit template import to database
-app.post('/api/templates/import', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/templates/import', upload.single('file'), async (req: Request, res: Response) => {
   try {
     let parsedData = req.body.parsed;
 
@@ -205,7 +210,7 @@ app.post('/api/templates/import', upload.single('file'), async (req: Request, re
 });
 
 // Duplicate a template atomically
-app.post('/api/templates/:id/duplicate', async (req: Request, res: Response) => {
+router.post('/templates/:id/duplicate', async (req: Request, res: Response) => {
   try {
     const templateId = req.params.id;
     const customName = req.body.name;
@@ -218,7 +223,7 @@ app.post('/api/templates/:id/duplicate', async (req: Request, res: Response) => 
 });
 
 // Create a new blank or custom template
-app.post('/api/templates', async (req: Request, res: Response) => {
+router.post('/templates', async (req: Request, res: Response) => {
   try {
     const { name, description, status } = req.body;
     if (!name || !name.trim()) {
@@ -239,7 +244,7 @@ app.post('/api/templates', async (req: Request, res: Response) => {
 });
 
 // Update Template info
-app.patch('/api/templates/:id', async (req: Request, res: Response) => {
+router.patch('/templates/:id', async (req: Request, res: Response) => {
   try {
     const { name, description, status } = req.body;
     const updates: string[] = [];
@@ -283,7 +288,7 @@ app.patch('/api/templates/:id', async (req: Request, res: Response) => {
 });
 
 // Delete Template
-app.delete('/api/templates/:id', async (req: Request, res: Response) => {
+router.delete('/templates/:id', async (req: Request, res: Response) => {
   try {
     const result = await query(
       `DELETE FROM templates WHERE id = $1 RETURNING id`,
@@ -300,7 +305,7 @@ app.delete('/api/templates/:id', async (req: Request, res: Response) => {
 });
 
 // Update Section
-app.patch('/api/sections/:id', async (req: Request, res: Response) => {
+router.patch('/sections/:id', async (req: Request, res: Response) => {
   try {
     const { name, position } = req.body;
     const updates: string[] = [];
@@ -334,7 +339,7 @@ app.patch('/api/sections/:id', async (req: Request, res: Response) => {
 });
 
 // Add Section
-app.post('/api/sections', async (req: Request, res: Response) => {
+router.post('/sections', async (req: Request, res: Response) => {
   try {
     const { template_id, name, position } = req.body;
     if (!template_id || !name) {
@@ -369,7 +374,7 @@ app.post('/api/sections', async (req: Request, res: Response) => {
 });
 
 // Delete Section
-app.delete('/api/sections/:id', async (req: Request, res: Response) => {
+router.delete('/sections/:id', async (req: Request, res: Response) => {
   try {
     const secRes = await query(`DELETE FROM sections WHERE id = $1 RETURNING template_id`, [req.params.id]);
     if (secRes.rows.length === 0) return res.status(404).json({ error: 'Section not found' });
@@ -394,7 +399,7 @@ app.delete('/api/sections/:id', async (req: Request, res: Response) => {
 });
 
 // Update Item
-app.patch('/api/items/:id', async (req: Request, res: Response) => {
+router.patch('/items/:id', async (req: Request, res: Response) => {
   try {
     const { name, position } = req.body;
     const updates: string[] = [];
@@ -428,7 +433,7 @@ app.patch('/api/items/:id', async (req: Request, res: Response) => {
 });
 
 // Add Item
-app.post('/api/items', async (req: Request, res: Response) => {
+router.post('/items', async (req: Request, res: Response) => {
   try {
     const { section_id, name, position } = req.body;
     if (!section_id || !name) {
@@ -466,7 +471,7 @@ app.post('/api/items', async (req: Request, res: Response) => {
 });
 
 // Delete Item
-app.delete('/api/items/:id', async (req: Request, res: Response) => {
+router.delete('/items/:id', async (req: Request, res: Response) => {
   try {
     const itemRes = await query(
       `SELECT s.template_id FROM items i JOIN sections s ON i.section_id = s.id WHERE i.id = $1`,
@@ -494,7 +499,7 @@ app.delete('/api/items/:id', async (req: Request, res: Response) => {
 });
 
 // Update Comment
-app.patch('/api/comments/:id', async (req: Request, res: Response) => {
+router.patch('/comments/:id', async (req: Request, res: Response) => {
   try {
     const { content_html, position } = req.body;
     const updates: string[] = [];
@@ -536,7 +541,7 @@ app.patch('/api/comments/:id', async (req: Request, res: Response) => {
 });
 
 // Add Comment
-app.post('/api/comments', async (req: Request, res: Response) => {
+router.post('/comments', async (req: Request, res: Response) => {
   try {
     const { item_id, content_html, position } = req.body;
     if (!item_id || content_html === undefined) {
@@ -586,7 +591,7 @@ app.post('/api/comments', async (req: Request, res: Response) => {
 });
 
 // Delete Comment
-app.delete('/api/comments/:id', async (req: Request, res: Response) => {
+router.delete('/comments/:id', async (req: Request, res: Response) => {
   try {
     const cmtRes = await query(
       `SELECT s.template_id FROM comments c JOIN items i ON c.item_id = i.id JOIN sections s ON i.section_id = s.id WHERE c.id = $1`,
@@ -613,7 +618,7 @@ app.delete('/api/comments/:id', async (req: Request, res: Response) => {
 });
 
 // Resolve or dismiss Import Issue
-app.patch('/api/issues/:id', async (req: Request, res: Response) => {
+router.patch('/issues/:id', async (req: Request, res: Response) => {
   try {
     const { resolution_status } = req.body;
     if (!['UNRESOLVED', 'RESOLVED', 'DISMISSED'].includes(resolution_status)) {
@@ -632,7 +637,7 @@ app.patch('/api/issues/:id', async (req: Request, res: Response) => {
 });
 
 // Trigger Re-seed
-app.post('/api/seed', async (_req: Request, res: Response) => {
+router.post('/seed', async (_req: Request, res: Response) => {
   try {
     const fixturePath = path.join(process.cwd(), 'fixtures/spectora/InterNACHI-Residential-HTML-Text.xlsx');
     if (!fs.existsSync(fixturePath)) {
@@ -648,6 +653,10 @@ app.post('/api/seed', async (_req: Request, res: Response) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Mount router on both '/api' and '/' for dual standalone and Vercel serverless routing
+app.use('/api', router);
+app.use('/', router);
 
 // Global API Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

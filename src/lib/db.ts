@@ -1,6 +1,9 @@
 import dns from 'dns';
 try {
-  dns.setDefaultResultOrder('verbatim');
+  // Only use verbatim DNS if not in Vercel (AWS Lambda lacks IPv6 egress)
+  if (!process.env.VERCEL) {
+    dns.setDefaultResultOrder('verbatim');
+  }
 } catch {
   // Ignore in environments where setDefaultResultOrder is not available
 }
@@ -8,14 +11,22 @@ import dotenv from 'dotenv';
 dotenv.config({ override: true });
 import { Pool, PoolClient } from 'pg';
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres.lcfnatgpntbvlhreczvt:InspectCore-backup@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres';
+let connectionString = (process.env.DATABASE_URL || '').trim();
+
+// Automatically sanitize and fallback to the verified IPv4 pooler if direct hostname is provided
+if (!connectionString || connectionString.includes('db.lcfnatgpntbvlhreczvt.supabase.co')) {
+  connectionString = 'postgresql://postgres.lcfnatgpntbvlhreczvt:InspectCore-backup@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres';
+}
+
+// Strip any inadvertent whitespace after "postgres:"
+connectionString = connectionString.replace(/postgres:\s+/, 'postgres:');
 
 export const pool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
-  max: 15,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 30000,
+  max: process.env.VERCEL ? 5 : 15,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 10000,
 });
 
 pool.on('error', (err) => {
