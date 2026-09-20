@@ -1,0 +1,6 @@
+{
+  "name": "InspectionCore",
+  "description": "Commercial and residential property inspection platform with 3-tier hierarchy standards, spreadsheet migration, and defect narrative reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
